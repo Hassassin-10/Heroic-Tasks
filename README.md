@@ -2,7 +2,7 @@
 
 > A productivity web app powered by Firebase, Firestore & Next.js — with Ben 10 vibes, XP system, and smooth GSAP animations.
 
-![Heroic Tasks Banner](https://user-images.githubusercontent.com/your-banner-url-here.png)
+![Heroic Tasks Banner](/public/Banner.png)
 
 ---
 
@@ -38,7 +38,7 @@
 
 | Dashboard | Report Page | Mobile View |
 |-----------|-------------|-------------|
-| ![1](https://user-images.githubusercontent.com/your-img1.png) | ![2](https://user-images.githubusercontent.com/your-img2.png) | ![3](https://user-images.githubusercontent.com/your-img3.png) |
+| ![1](/public/Dashboard.png) | ![2](/public/Report.png) | ![3](/public/mobile.jpg) |
 
 ---
 
