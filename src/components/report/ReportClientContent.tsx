@@ -125,7 +125,7 @@ export default function ReportClientContent() {
     
     const pdfHeader = document.createElement('div');
     pdfHeader.className = 'mb-4 p-4 border-b border-border text-center';
-    pdfHeader.innerHTML = \`
+    pdfHeader.innerHTML = `
       <div class="flex items-center justify-center mb-2">
         <style> .pdf-omnitrix-icon { height: 2rem; width: 2rem; margin-right: 0.5rem; color: hsl(var(--primary)); } 
         .pdf-omnitrix-icon circle[fill="hsl(var(--primary-foreground))"] { fill: #FFFFFF; }
@@ -140,7 +140,7 @@ export default function ReportClientContent() {
         <h1 class="text-2xl font-headline font-bold text-primary">Heroic Tasks Report</h1>
       </div>
       <p class="text-sm text-muted-foreground">Exported on: ${format(new Date(), 'PPP p')}</p>
-    \`;
+    `;
     clonedElement.insertBefore(pdfHeader, clonedElement.firstChild);
     
     const buttonsToHide = clonedElement.querySelectorAll('.hide-on-pdf');
@@ -217,7 +217,7 @@ export default function ReportClientContent() {
           acc.push({ date: dateKey, completed: 1 });
         }
       } else {
-         console.warn(\`Skipping task with invalid createdAt for chart data: ${task.id}\`, task.createdAt);
+         console.warn(`Skipping task with invalid createdAt for chart data: ${task.id}`, task.createdAt);
       }
     } catch (e) {
       console.warn("Error processing task createdAt for chart:", task.id, task.createdAt, e);
@@ -346,6 +346,7 @@ export default function ReportClientContent() {
                     tickMargin={8}
                     tickFormatter={(value) => {
                         try {
+                            // value is 'YYYY-MM-DD'
                             const dateObj = parseISO(value); 
                             if (isValidDate(dateObj)) {
                                 return format(dateObj, "MMM d");
@@ -415,3 +416,4 @@ export default function ReportClientContent() {
     </div>
   );
 }
+
