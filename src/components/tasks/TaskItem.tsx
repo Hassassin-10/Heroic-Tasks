@@ -19,7 +19,7 @@ interface TaskItemProps {
 }
 
 export function TaskItem({ task, onToggleComplete, onDelete, onEdit }: TaskItemProps) {
-  
+
   const handleEditClick = () => {
     onEdit(task);
   };
@@ -27,31 +27,41 @@ export function TaskItem({ task, onToggleComplete, onDelete, onEdit }: TaskItemP
   const handleDeleteClick = () => {
     onDelete(task.id);
   };
-  
-  const formatTaskTime = (timeString?: string) => {
+
+  const formatTaskTime = (timeString?: string, dateString?: string) => { // dateString is yyyy-MM-dd
     if (!timeString) return '';
     const [hoursStr, minutesStr] = timeString.split(':');
     const hours = parseInt(hoursStr, 10);
     const minutes = parseInt(minutesStr, 10);
 
-    if (isNaN(hours) || isNaN(minutes)) return ''; 
-    
-    const date = new Date();
-    date.setHours(hours);
-    date.setMinutes(minutes);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    if (isNaN(hours) || isNaN(minutes)) return '';
+
+    let baseDate: Date;
+    if (dateString) { // dateString is 'yyyy-MM-dd'
+      const fullDateTimeString = `${dateString}T${timeString}`; // e.g., "2023-11-25T14:30"
+      baseDate = parseISO(fullDateTimeString);
+    } else {
+      // If no dateString, create a date object for today to set the time on
+      baseDate = new Date();
+      baseDate.setHours(hours);
+      baseDate.setMinutes(minutes);
+      baseDate.setSeconds(0);
+      baseDate.setMilliseconds(0);
+    }
+
+    return isValid(baseDate) ? format(baseDate, 'p') : ''; // 'p' is like h:mm aa (e.g., 5:00 PM)
   };
+
 
   const formatDateDistance = (dateInput?: string | Timestamp | number): string => {
     if (!dateInput) return '';
     try {
       let date: Date;
       if (typeof dateInput === 'string') {
-        const parsedDate = parseISO(dateInput); 
+        const parsedDate = parseISO(dateInput);
         if (isValid(parsedDate)) {
           date = parsedDate;
         } else {
-          
           const parts = dateInput.split('-');
           if (parts.length === 3) {
             date = new Date(parseInt(parts[0],10), parseInt(parts[1],10) -1, parseInt(parts[2],10));
@@ -62,13 +72,13 @@ export function TaskItem({ task, onToggleComplete, onDelete, onEdit }: TaskItemP
         }
       } else if (dateInput instanceof Timestamp) {
         date = dateInput.toDate();
-      } else if (typeof dateInput === 'number') { 
-        date = fromUnixTime(dateInput / 1000); 
+      } else if (typeof dateInput === 'number') {
+        date = fromUnixTime(dateInput / 1000);
       } else {
-        return 'Invalid date type'; 
+        return 'Invalid date type';
       }
-      
-      if (!isValid(date)) return "Invalid date"; 
+
+      if (!isValid(date)) return "Invalid date";
 
       return formatDistanceToNow(date, { addSuffix: true });
     } catch (error) {
@@ -76,6 +86,10 @@ export function TaskItem({ task, onToggleComplete, onDelete, onEdit }: TaskItemP
       return "Invalid date";
     }
   };
+
+  const formattedTimeOnly = formatTaskTime(task.time); // Time if no date
+  const formattedTimeWithDate = formatTaskTime(task.time, task.dueDate); // Time potentially combined with date logic
+  const formattedDueDateOnly = task.dueDate ? formatDateDistance(task.dueDate) : '';
 
 
   return (
@@ -101,13 +115,14 @@ export function TaskItem({ task, onToggleComplete, onDelete, onEdit }: TaskItemP
               {task.dueDate && (
                 <div className="text-xs text-muted-foreground flex items-center">
                   <CalendarDays className="h-3 w-3 mr-1 flex-shrink-0" />
-                  Due: {formatDateDistance(task.dueDate)}
+                  Due: {formattedDueDateOnly}
+                  {task.time && formattedTimeWithDate && (`, ${formattedTimeWithDate}`)}
                 </div>
               )}
-              {task.time && formatTaskTime(task.time) && ( 
+              {!task.dueDate && task.time && formattedTimeOnly && (
                 <div className="text-xs text-muted-foreground flex items-center">
                   <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
-                  Time: {formatTaskTime(task.time)}
+                  Time: {formattedTimeOnly}
                 </div>
               )}
             </div>

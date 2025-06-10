@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { preloadSounds, playCompleteSound, playLevelUpSound, playClickSound } from "@/lib/soundUtils";
+import { preloadSounds, playCompleteSound, playLevelUpSound, playClickSound, playTransformSound } from "@/lib/soundUtils";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth";
 import {
@@ -141,8 +141,14 @@ export default function HeroicTasksPage() {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-        setIsGuestActive(false); 
+        setIsGuestActive(false);
         setIsLoading(true);
+        if (!db) {
+          console.error("Firestore (db) is not initialized. Check Firebase config.");
+          setIsLoading(false);
+          toast({ title: "Database Error", description: "Could not connect to the database.", variant: "destructive" });
+          return;
+        }
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
@@ -162,18 +168,24 @@ export default function HeroicTasksPage() {
         }
       } else {
         setUserProfile(null);
-        setTasks([]); 
-        if (!isGuestActive) { 
+        setTasks([]);
+        if (!isGuestActive) {
             setIsLoading(false);
         }
       }
     });
     return () => unsubscribeAuth();
-  }, [toast, isGuestActive, loadGuestData]); 
+  }, [toast, isGuestActive, loadGuestData]);
 
   useEffect(() => {
     if (currentUser?.uid && !isGuestActive) {
       setIsLoading(true);
+      if (!db) {
+        console.error("Firestore (db) is not initialized. Cannot fetch tasks.");
+        setIsLoading(false);
+        toast({ title: "Database Error", description: "Could not fetch tasks due to database connection issue.", variant: "destructive" });
+        return;
+      }
       const tasksColRef = collection(db, "users", currentUser.uid, "tasks");
       const q = query(tasksColRef, orderBy("createdAt", "desc"));
 
@@ -190,16 +202,16 @@ export default function HeroicTasksPage() {
         setIsLoading(false);
       });
       return () => unsubscribeTasks();
-    } else if (!currentUser && !isGuestActive) { 
-      setTasks([]); 
+    } else if (!currentUser && !isGuestActive) {
+      setTasks([]);
       setIsLoading(false);
     }
-  }, [currentUser, toast, isGuestActive]); 
+  }, [currentUser, toast, isGuestActive]);
 
   useEffect(() => {
-    if (isGuestActive && isMounted) { 
+    if (isGuestActive && isMounted) {
       loadGuestData();
-      setIsLoading(false); 
+      setIsLoading(false);
     }
   }, [isGuestActive, isMounted, loadGuestData]);
 
@@ -209,7 +221,7 @@ export default function HeroicTasksPage() {
   }, []);
 
   const addXP = useCallback(async (amount: number) => {
-    if (amount <= 0) return; 
+    if (amount <= 0) return;
 
     if (isGuestActive) {
       let newXP = guestProfile.xp + amount;
@@ -232,6 +244,11 @@ export default function HeroicTasksPage() {
         });
       }
     } else if (currentUser && userProfile) {
+      if (!db) {
+        console.error("Firestore (db) is not initialized. Cannot update XP.");
+        toast({ title: "Database Error", description: "Failed to update your XP due to database connection issue.", variant: "destructive" });
+        return;
+      }
       const userRef = doc(db, "users", currentUser.uid);
       let newXP = userProfile.xp + amount;
       let newLevel = userProfile.level;
@@ -246,7 +263,7 @@ export default function HeroicTasksPage() {
       }
       try {
         await updateDoc(userRef, { xp: newXP, level: newLevel, lastLogin: serverTimestamp() });
-        setUserProfile(prev => prev ? { ...prev, xp: newXP, level: newLevel } : null); 
+        setUserProfile(prev => prev ? { ...prev, xp: newXP, level: newLevel } : null);
         if (levelUpOccurred) {
           playLevelUpSound();
           toast({
@@ -261,7 +278,8 @@ export default function HeroicTasksPage() {
     }
   }, [currentUser, userProfile, isGuestActive, guestProfile, toast, calculateXpToNextLevel]);
 
-  const handleAddTask = async (newTaskData: Omit<Task, "id" | "completed" | "createdAt" | "userId" | "xpEarned">) => {
+  const handleAddTask = async (newTaskData: Omit<Task, "id" | "completed" | "createdAt" | "userId" | "xpEarned" | "xpAwardedAt">) => {
+    playTransformSound();
     const xpToAward = XP_FOR_PRIORITY[newTaskData.priority || 'low'];
 
     if (isGuestActive) {
@@ -269,18 +287,25 @@ export default function HeroicTasksPage() {
         ...newTaskData,
         id: generateLocalId(),
         completed: false,
-        createdAt: Date.now(), 
+        createdAt: Date.now(),
         xpEarned: xpToAward,
+        xpAwardedAt: null, // Initialize xpAwardedAt
       };
       setGuestTasks(prev => [taskToAdd, ...prev]);
       toast({ title: "Task Added (Guest)!", description: `"${newTaskData.title}" is ready.`, className: "bg-primary text-primary-foreground" });
     } else if (currentUser) {
+      if (!db) {
+        console.error("Firestore (db) is not initialized. Cannot add task.");
+        toast({ title: "Database Error", description: "Could not add task due to database connection issue.", variant: "destructive" });
+        return;
+      }
       const taskToAdd: Omit<Task, "id"> = {
         ...newTaskData,
         userId: currentUser.uid,
         completed: false,
         createdAt: serverTimestamp() as Timestamp,
         xpEarned: xpToAward,
+        xpAwardedAt: null, // Initialize xpAwardedAt
       };
       try {
         const tasksColRef = collection(db, "users", currentUser.uid, "tasks");
@@ -298,32 +323,56 @@ export default function HeroicTasksPage() {
 
   const handleToggleComplete = async (id: string) => {
     if (isGuestActive) {
-      let taskToUpdate: Task | undefined;
-      setGuestTasks(prevTasks => prevTasks.map(t => {
-        if (t.id === id) {
-          taskToUpdate = { ...t, completed: !t.completed };
-          return taskToUpdate;
-        }
-        return t;
-      }));
-      if (taskToUpdate && taskToUpdate.completed) {
-        const xpGained = taskToUpdate.xpEarned || DEFAULT_XP_FOR_OLD_TASKS;
+      const taskIndex = guestTasks.findIndex(t => t.id === id);
+      if (taskIndex === -1) return;
+
+      const oldTask = guestTasks[taskIndex];
+      const newCompletedStatus = !oldTask.completed;
+      let newXpAwardedAt = oldTask.xpAwardedAt;
+
+      const updatedTasks = guestTasks.map(t =>
+        t.id === id ? { ...t, completed: newCompletedStatus, xpAwardedAt: newXpAwardedAt } : t
+      );
+
+      if (newCompletedStatus && !oldTask.xpAwardedAt) {
+        const xpGained = oldTask.xpEarned || DEFAULT_XP_FOR_OLD_TASKS;
         addXP(xpGained);
+        newXpAwardedAt = Date.now();
+        updatedTasks[taskIndex].xpAwardedAt = newXpAwardedAt; // Update in the mapped array
         playCompleteSound();
         toast({ title: "Mission Accomplished (Guest)!", description: `+${xpGained} XP.`, className: "bg-accent text-accent-foreground" });
       }
+      setGuestTasks(updatedTasks);
+
     } else if (currentUser) {
+      if (!db) {
+        console.error("Firestore (db) is not initialized. Cannot toggle task.");
+        toast({ title: "Database Error", description: "Could not update task due to database connection issue.", variant: "destructive" });
+        return;
+      }
       const taskRef = doc(db, "users", currentUser.uid, "tasks", id);
       const taskToUpdate = tasks.find(t => t.id === id);
+
       if (!taskToUpdate) return;
+
       const newCompletedStatus = !taskToUpdate.completed;
+      const updateData: { completed: boolean; xpAwardedAt?: Timestamp } = { completed: newCompletedStatus };
+      let awardedXpThisToggle = false;
+
+      if (newCompletedStatus && !taskToUpdate.xpAwardedAt) {
+        const xpGained = taskToUpdate.xpEarned || DEFAULT_XP_FOR_OLD_TASKS;
+        addXP(xpGained);
+        updateData.xpAwardedAt = serverTimestamp() as Timestamp;
+        awardedXpThisToggle = true;
+        playCompleteSound();
+        toast({ title: "Mission Accomplished!", description: `+${xpGained} XP.`, className: "bg-accent text-accent-foreground" });
+      }
+
       try {
-        await updateDoc(taskRef, { completed: newCompletedStatus });
-        if (newCompletedStatus) {
-          const xpGained = taskToUpdate.xpEarned || DEFAULT_XP_FOR_OLD_TASKS;
-          addXP(xpGained);
-          playCompleteSound();
-          toast({ title: "Mission Accomplished!", description: `+${xpGained} XP.`, className: "bg-accent text-accent-foreground" });
+        await updateDoc(taskRef, updateData);
+        // If XP wasn't awarded but task was completed (e.g. already awarded), still play sound if appropriate
+        if (newCompletedStatus && !awardedXpThisToggle && !taskToUpdate.completed) {
+            playCompleteSound(); // Play sound if it's a fresh completion, even if XP was already awarded prior
         }
       } catch (error) {
         console.error("Error toggling task in Firestore:", error);
@@ -333,7 +382,7 @@ export default function HeroicTasksPage() {
   };
 
   const handleDeleteTask = async (id: string) => {
-    playClickSound(); 
+    playClickSound();
     let taskTitle = "Task";
     if (isGuestActive) {
       const taskToDelete = guestTasks.find(t => t.id === id);
@@ -341,6 +390,11 @@ export default function HeroicTasksPage() {
       setGuestTasks(prevTasks => prevTasks.filter(t => t.id !== id));
       toast({ title: "Task Removed (Guest)", description: `"${taskTitle}" has been cleared.`, variant: "destructive" });
     } else if (currentUser) {
+      if (!db) {
+        console.error("Firestore (db) is not initialized. Cannot delete task.");
+        toast({ title: "Database Error", description: "Could not delete task due to database connection issue.", variant: "destructive" });
+        return;
+      }
       const taskToDelete = tasks.find(t => t.id === id);
       if (taskToDelete) taskTitle = taskToDelete.title;
       const taskRef = doc(db, "users", currentUser.uid, "tasks", id);
@@ -355,17 +409,31 @@ export default function HeroicTasksPage() {
   };
 
   const handleEditTask = async (updatedTaskData: Task) => {
+    // Retain existing xpAwardedAt status when editing
+    const originalTask = (isGuestActive ? guestTasks : tasks).find(t => t.id === updatedTaskData.id);
+    const taskWithRetainedXpStatus = {
+      ...updatedTaskData,
+      xpAwardedAt: originalTask?.xpAwardedAt
+    };
+
     if (isGuestActive) {
-      setGuestTasks(prevTasks => prevTasks.map(t => t.id === updatedTaskData.id ? { ...updatedTaskData, xpEarned: t.xpEarned } : t)); 
+      setGuestTasks(prevTasks => prevTasks.map(t => t.id === taskWithRetainedXpStatus.id ? taskWithRetainedXpStatus : t));
       setEditingTask(null);
-      toast({ title: "Task Updated (Guest)!", description: `"${updatedTaskData.title}" modified.` });
+      toast({ title: "Task Updated (Guest)!", description: `"${taskWithRetainedXpStatus.title}" modified.` });
     } else if (currentUser) {
-      const { id, userId, createdAt, xpEarned, ...dataToUpdate } = updatedTaskData; 
+      if (!db) {
+        console.error("Firestore (db) is not initialized. Cannot edit task.");
+        toast({ title: "Database Error", description: "Could not edit task due to database connection issue.", variant: "destructive" });
+        return;
+      }
+      const { id, userId, createdAt, xpEarned, xpAwardedAt, ...dataToUpdate } = taskWithRetainedXpStatus;
       const taskRef = doc(db, "users", currentUser.uid, "tasks", id);
       try {
-        await updateDoc(taskRef, dataToUpdate);
+        // Ensure xpAwardedAt is explicitly part of dataToUpdate if it exists, otherwise Firestore might remove it if not set
+        const finalDataToUpdate = { ...dataToUpdate, ...(xpAwardedAt !== undefined && { xpAwardedAt })};
+        await updateDoc(taskRef, finalDataToUpdate);
         setEditingTask(null);
-        toast({ title: "Task Updated!", description: `"${updatedTaskData.title}" modified.` });
+        toast({ title: "Task Updated!", description: `"${taskWithRetainedXpStatus.title}" modified.` });
       } catch (error) {
         console.error("Error editing task in Firestore:", error);
         toast({ title: "Error", description: "Could not edit task.", variant: "destructive" });
@@ -374,7 +442,7 @@ export default function HeroicTasksPage() {
   };
 
   const openEditModal = (task: Task) => {
-    playClickSound(); 
+    playClickSound();
     setEditingTask(task);
   }
   const closeEditModal = () => setEditingTask(null);
@@ -386,7 +454,7 @@ export default function HeroicTasksPage() {
 
   let pageContent;
 
-  if (!isMounted || isLoading) {
+  if (!isMounted || (isLoading && (currentUser || (isGuestActive && !guestTasks.length)))) {
     pageContent = (
       <main className="flex-grow container mx-auto px-4 py-8 flex items-center justify-center">
         <div className="text-center p-10 text-lg font-semibold flex flex-col items-center">
@@ -467,7 +535,7 @@ export default function HeroicTasksPage() {
         isGuestActive={isGuestActive}
         onEnterGuestMode={handleEnterGuestMode}
         onExitGuestMode={handleExitGuestMode}
-        onAuthModalOpen={() => { playClickSound(); setIsAuthModalOpen(true);}} 
+        onAuthModalOpen={() => { playClickSound(); setIsAuthModalOpen(true);}}
       />
       {pageContent}
       <footer className="text-center py-4 text-xs sm:text-sm text-muted-foreground border-t border-border/40">
@@ -491,7 +559,7 @@ export default function HeroicTasksPage() {
             <TaskForm
               editingTask={editingTask}
               onEditTask={handleEditTask}
-              onAddTask={() => {}} 
+              onAddTask={() => {}} // This is fine as TaskForm won't call onAddTask when editingTask is present
               onDoneEditing={closeEditModal}
             />
           </DialogContent>

@@ -4,7 +4,7 @@
 
 // Sound file paths (assuming they are in public/assets/sounds/)
 const SOUND_FILES = {
-  click: '/assets/sounds/click.mp3', // Re-added click sound
+  click: '/assets/sounds/click.mp3',
   complete: '/assets/sounds/complete.mp3',
   levelUp: '/assets/sounds/levelup.mp3',
   transform: '/assets/sounds/transform.mp3',
@@ -27,14 +27,19 @@ const initializeMuteStateOnce = (): void => {
 
   const storedMuteState = localStorage.getItem(MUTE_STORAGE_KEY);
   if (storedMuteState !== null) {
-    isMutedGlobal = JSON.parse(storedMuteState);
+    try {
+      isMutedGlobal = JSON.parse(storedMuteState);
+    } catch (e) {
+      console.warn("Could not parse stored mute state, defaulting to false.", e);
+      isMutedGlobal = false;
+    }
   } else {
     // Default to not muted and store it
     isMutedGlobal = false;
     localStorage.setItem(MUTE_STORAGE_KEY, JSON.stringify(isMutedGlobal));
   }
   muteStateInitialized = true;
-  console.log('Mute state initialized:', isMutedGlobal);
+  // console.log('Mute state initialized:', isMutedGlobal); // Optional: for debugging
 };
 
 
@@ -54,7 +59,7 @@ export const preloadSounds = (): void => {
       audioCache[key] = audio;
     }
   });
-  console.log('Sounds preloaded.');
+  // console.log('Sounds preloaded.'); // Optional: for debugging
 };
 
 // Function to play a specified sound
@@ -78,7 +83,7 @@ export const playSound = (soundName: SoundKeys): void => {
 };
 
 // Convenience functions for specific sounds
-export const playClickSound = () => playSound('click'); // Re-added
+export const playClickSound = () => playSound('click');
 export const playCompleteSound = () => playSound('complete');
 export const playLevelUpSound = () => playSound('levelUp');
 export const playTransformSound = () => playSound('transform');
@@ -90,7 +95,7 @@ export const toggleMute = (): boolean => {
 
   isMutedGlobal = !isMutedGlobal;
   localStorage.setItem(MUTE_STORAGE_KEY, JSON.stringify(isMutedGlobal));
-  console.log('Mute toggled. New state:', isMutedGlobal);
+  // console.log('Mute toggled. New state:', isMutedGlobal); // Optional: for debugging
   return isMutedGlobal;
 };
 
@@ -100,4 +105,3 @@ export const getMuteState = (): boolean => {
   initializeMuteStateOnce(); // Ensure state is loaded if called independently
   return isMutedGlobal;
 };
-
