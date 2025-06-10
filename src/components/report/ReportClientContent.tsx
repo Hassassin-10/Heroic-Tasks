@@ -26,10 +26,6 @@ import { playClickSound } from '@/lib/soundUtils';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-// Dynamically import html2pdf.js only on client-side
-// const html2pdf = typeof window !== 'undefined' ? require('html2pdf.js') : null;
-// We will import it inside the function instead.
-
 interface ChartDataItem {
   date: string; // Will store 'YYYY-MM-DD'
   completed: number;
@@ -47,6 +43,12 @@ export default function ReportClientContent() {
   const fetchReportData = useCallback(async (user: FirebaseUser) => {
     setIsLoading(true);
     setError(null);
+    if (!db) {
+      setError("Database not initialized. Please check Firebase configuration.");
+      setIsLoading(false);
+      toast({ title: "Database Error", description: "Could not connect to the database.", variant: "destructive" });
+      return;
+    }
     try {
       const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
@@ -346,7 +348,6 @@ export default function ReportClientContent() {
                     tickMargin={8}
                     tickFormatter={(value) => {
                         try {
-                            // value is 'YYYY-MM-DD'
                             const dateObj = parseISO(value); 
                             if (isValidDate(dateObj)) {
                                 return format(dateObj, "MMM d");
@@ -416,4 +417,3 @@ export default function ReportClientContent() {
     </div>
   );
 }
-
